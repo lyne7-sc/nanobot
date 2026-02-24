@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"mime"
@@ -14,6 +15,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/fswatch"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
 var (
@@ -256,18 +258,26 @@ func (s *Server) readFileResource(uri string) (*mcp.ReadResourceResult, error) {
 	if mimeType == "" {
 		mimeType = "application/octet-stream"
 	}
+	if i := strings.IndexByte(mimeType, ';'); i >= 0 {
+		mimeType = strings.TrimSpace(mimeType[:i])
+	}
 
-	contentStr := string(content)
+	rc := mcp.ResourceContent{
+		URI:      uri,
+		Name:     filepath.Base(relPath),
+		MIMEType: mimeType,
+		Meta:     fileResourceMeta(relPath, info),
+	}
+	if _, isImage := types.ImageMimeTypes[mimeType]; isImage {
+		rc.Blob = new(base64.StdEncoding.EncodeToString(content))
+	} else if _, isPDF := types.PDFMimeTypes[mimeType]; isPDF {
+		rc.Blob = new(base64.StdEncoding.EncodeToString(content))
+	} else {
+		rc.Text = new(string(content))
+	}
+
 	return &mcp.ReadResourceResult{
-		Contents: []mcp.ResourceContent{
-			{
-				URI:      uri,
-				Name:     filepath.Base(relPath),
-				MIMEType: mimeType,
-				Text:     &contentStr,
-				Meta:     fileResourceMeta(relPath, info),
-			},
-		},
+		Contents: []mcp.ResourceContent{rc},
 	}, nil
 }
 
